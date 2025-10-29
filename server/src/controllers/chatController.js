@@ -1,6 +1,7 @@
 const asyncHandler = require("express-async-handler");
 const Chat = require("../models/chatModel");
 const Message = require("../models/messageModel");
+const { getIO, emitToUser } = require("../sockets/index.js");
 
 const createChat = asyncHandler(async (req, res) => {
   const { memberIds = [], isGroup = false, name = "", avatarUrl = "" } = req.body;
@@ -18,7 +19,20 @@ const createChat = asyncHandler(async (req, res) => {
   const mapped = await Chat.findById(chat._id)
     .populate({ path: "members", select: "username name avatarUrl isOnline lastSeen" })
     .populate("lastMessage");
-  res.json(mapChat(mapped));
+  const mappedChat = mapChat(mapped);
+
+  // Realtime: notify all members that a new chat was created
+  try {
+    const io = getIO();
+    (mappedChat.members || []).forEach((m) => {
+      const uid = m.id || m._id;
+      if (uid) emitToUser(io, String(uid), "chat:created", mappedChat);
+    });
+  } catch (err) {
+    // noop if socket not ready
+  }
+
+  res.json(mappedChat);
 });
 
 const getChats = asyncHandler(async (req, res) => {

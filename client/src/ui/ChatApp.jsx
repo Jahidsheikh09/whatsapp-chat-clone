@@ -161,16 +161,22 @@ export default function ChatApp({ socket }) {
           );
         }
 
-        // Chat not found locally — fetch it and prepend when available.
-        (async () => {
-          try {
-            const chat = await apiGet(`/api/chats/${chatId}`, token);
-            setChats((cur) => (Array.isArray(cur) ? [chat, ...cur] : [chat]));
-          } catch (err) {
-            console.error("Failed to fetch chat for incoming message:", err);
-          }
-        })();
-        return list;
+        // Chat not found locally — if chatInfo provided, use it immediately; else fetch
+        if (message.chatInfo) {
+          const chat = { ...message.chatInfo, lastMessage: message };
+          setChats((cur) => (Array.isArray(cur) ? [chat, ...cur] : [chat]));
+          return list;
+        } else {
+          (async () => {
+            try {
+              const chat = await apiGet(`/api/chats/${chatId}`, token);
+              setChats((cur) => (Array.isArray(cur) ? [chat, ...cur] : [chat]));
+            } catch (err) {
+              console.error("Failed to fetch chat for incoming message:", err);
+            }
+          })();
+          return list;
+        }
       });
 
       // Increment unread count if message not for active chat or not focused on it
@@ -194,6 +200,16 @@ export default function ChatApp({ socket }) {
     }
 
     socket.on("message:new", handleNewMessage);
+    socket.on("chat:created", (chat) => {
+      if (!chat) return;
+      setChats((prev) => {
+        const list = Array.isArray(prev) ? prev : [];
+        const exists = list.some((c) => String(c.id || c._id) === String(chat.id || chat._id));
+        if (exists) return list;
+        return [chat, ...list];
+      });
+      try { socket.emit("chat:join", chat.id || chat._id); } catch {}
+    });
     socket.on("message:status", ({ messageId, userId, status }) => {
       // Update local message status ticks for sender's view
       setMessages((prev) => {
@@ -242,6 +258,7 @@ export default function ChatApp({ socket }) {
       socket.off("message:new", handleNewMessage);
       socket.off("typing", handleTypingEvent);
       socket.off("message:status");
+      socket.off("chat:created");
       socket.off("user:presence");
       socket.off("connect");
       socket.off("disconnect");

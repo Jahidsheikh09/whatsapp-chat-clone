@@ -7,7 +7,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 const connectDB = require("./config/db.js");
-const initSocket = require("./sockets/index.js");
+const { initSocket } = require("./sockets/index.js");
 const { errorHandler } = require("./middleware/errorMiddleware.js");
 const { authenticate } = require("./middleware/authMiddleware.js");
 

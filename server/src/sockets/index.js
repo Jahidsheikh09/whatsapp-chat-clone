@@ -6,6 +6,7 @@ const Message = require("../models/messageModel");
 
 const userIdToSockets = new Map();
 const socketIdToUser = new Map();
+let ioInstance = null;
 
 function addUserSocket(userId, socketId) {
   const set = userIdToSockets.get(userId) || new Set();
@@ -38,8 +39,21 @@ function emitToUser(io, userId, event, payload) {
 
 function initSocket(server, corsOrigin) {
   const io = new Server(server, {
-    cors: { origin: corsOrigin, methods: ["GET", "POST"], credentials: true },
+    cors: {
+      origin(origin, callback) {
+        try {
+          if (!origin) return callback(null, true); // allow file:// and same-origin
+          if (Array.isArray(corsOrigin) && corsOrigin.includes(origin)) return callback(null, true);
+          return callback(new Error("Not allowed by Socket.IO CORS"), false);
+        } catch (e) {
+          return callback(null, true);
+        }
+      },
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
   });
+  ioInstance = io;
 
   io.use((socket, next) => {
     try {
@@ -121,6 +135,31 @@ function initSocket(server, corsOrigin) {
           return out;
         };
 
+        // Prepare a lightweight chat info snapshot for receivers who might not have this chat locally yet
+        let chatInfo = null;
+        try {
+          const pop = await Chat.findById(chat._id)
+            .populate({ path: "members", select: "username name avatarUrl isOnline lastSeen" })
+            .populate("lastMessage");
+          chatInfo = {
+            id: pop._id.toString(),
+            isGroup: pop.isGroup,
+            name: pop.name,
+            avatarUrl: pop.avatarUrl,
+            members: (pop.members || []).map((u) => ({
+              id: u._id.toString(),
+              username: u.username,
+              name: u.name,
+              avatarUrl: u.avatarUrl,
+              isOnline: u.isOnline,
+              lastSeen: u.lastSeen,
+            })),
+            admin: pop.admin ? pop.admin.toString() : null,
+          };
+        } catch (e) {
+          // non-fatal; receivers can still fetch via REST
+        }
+
         const outMsg = {
           id: message._id.toString(),
           chat: message.chat?.toString ? message.chat.toString() : String(message.chat),
@@ -130,6 +169,7 @@ function initSocket(server, corsOrigin) {
           status: normalizeStatus(message.status),
           createdAt: message.createdAt,
           updatedAt: message.updatedAt,
+          chatInfo,
         };
 
         // Emit to the chat room AND directly to each member's sockets to ensure delivery
@@ -208,4 +248,9 @@ function initSocket(server, corsOrigin) {
   return io;
 }
 
-module.exports = initSocket;
+function getIO() {
+  if (!ioInstance) throw new Error("Socket.IO not initialized yet");
+  return ioInstance;
+}
+
+module.exports = { initSocket, getIO, emitToUser };
