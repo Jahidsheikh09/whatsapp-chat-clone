@@ -8,14 +8,16 @@ A full-stack real-time chat application with authentication, one-to-one chats, g
 - Tooling: Vite, Nodemon, Helmet, CORS, Rate limiting
 
 ## Features
-- Authentication (register/login) with JWT, persistent session via `Authorization: Bearer` and cookies
+- Authentication (register/login) with JWT, persistent session via `Authorization: Bearer`
 - One-to-one chats and group chats
-- Realtime messaging via Socket.IO
-- Delivery and seen ticks on messages
+- Realtime messaging via Socket.IO (one-to-one and group)
+- Delivery and seen ticks on messages (sent, delivered, seen)
 - Typing indicators
 - Presence/online status and last seen
+- Chat header shows avatar, name, and presence; list shows names with unread badges
 - Group management (create group, view members, remove members if admin)
 - User search to start chats or add to groups
+- Profile update (name, avatar)
 - Responsive WhatsApp-like UI
 
 ## Monorepo Structure
@@ -52,16 +54,23 @@ whatsapp-Clone/
 Server (`server/.env`):
 ```
 PORT=5000
-MONGO_URI=mongodb://localhost:27017/whatsapp_clone
+MONGO_URI=mongodb+srv://<username>:<password>@<cluster>/<db>?retryWrites=true&w=majority
 JWT_SECRET=replace_with_a_long_random_secret
-CLIENT_URL=http://localhost:5173
+# comma-separated client origins allowed by CORS (dev defaults also include 5173,5174)
+CLIENT_URL=http://localhost:5173,http://localhost:5174
 ```
 
 Client (`client/.env`):
 ```
-VITE_API_URL=http://localhost:5000
 VITE_SERVER_URL=http://localhost:5000
+# Optional; if omitted, API falls back to VITE_SERVER_URL
+VITE_API_URL=http://localhost:5000
 ```
+
+MongoDB Atlas notes:
+- Create a database user and get your connection string from Atlas.
+- Replace `<username>`, `<password>`, `<cluster>`, and `<db>` in `MONGO_URI`.
+- Ensure your IP is allowlisted in Atlas Network Access for development.
 
 ## Install & Run (Windows PowerShell)
 
@@ -104,8 +113,8 @@ Server (`server/package.json`):
 ## How It Works
 
 ### Auth flow
-- Register/Login via REST (`/api/auth/register`, `/api/auth/login`)
-- Client stores token in memory and attaches as `Authorization: Bearer <token>`
+- Register/Login via REST (`/api/users/register`, `/api/users/login`)
+- Client stores token and attaches as `Authorization: Bearer <token>`
 - Protected routes validated by middleware on the server
 
 ### Chats and messages
@@ -123,14 +132,16 @@ Server (`server/package.json`):
 - `GET /api/users?q=<term>` returns users to start chats or add to groups
 
 ## REST API (summary)
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET  /api/auth/me`
+- `POST /api/users/register`
+- `POST /api/users/login`
+- `GET  /api/users/me`
 - `GET  /api/users?q=<term>`
 - `GET  /api/chats`
 - `POST /api/chats` (create 1:1 or group)
+- `GET  /api/chats/:chatId`
 - `GET  /api/chats/:chatId/messages`
 - `GET  /api/chats/:chatId/members`
+- `POST /api/chats/:chatId/members` (add members; admin)
 - `POST /api/chats/:chatId/members/remove` (or `DELETE /api/chats/:chatId/members/:userId`)
 
 Authenticated via `Authorization: Bearer <token>`.
@@ -142,6 +153,7 @@ Client → Server:
 - `message:seen` { messageIds }
 - `message:delivered` { messageId }
 - `typing` { chatId, typing: boolean }
+- `chat:join` chatId
 
 Server → Client:
 - `message:new` message
@@ -161,6 +173,23 @@ Server → Client:
 - Empty chats: ensure you’re logged in and MongoDB is reachable (`MONGO_URI`)
 - Socket errors: check server console, firewall, and port conflicts
 - Time drift: delivery/seen rely on server processing; ensure server is running
+
+If messages show only on the sender side:
+- Verify both clients connect to the same backend URL for both REST and sockets (`VITE_SERVER_URL` and `VITE_API_URL`).
+- Ensure the server logs show sockets joining rooms on connect and via `chat:join`.
+- Confirm `CLIENT_URL` includes your client origin.
+
+## Deployment
+- Deploy the server (Node/Express) to a platform like Render, Railway, or Vercel Functions with WebSockets support.
+- Set `MONGO_URI` to your Atlas URI, `JWT_SECRET` to a strong value, and `CLIENT_URL` to your deployed frontend origin.
+- Build the client (`npm run build`) and deploy the `client/dist` output to a static host (Vercel/Netlify/S3+CloudFront).
+
+## Roadmap / Optional Features
+- File and image upload in chat (store as message.media)
+- Notifications for unread messages
+- Emoji picker and reactions
+- Message search and pagination
+
 
 ## Notes
 - This project focuses on readability; production hardening (rate limits, input validation, refresh tokens, file uploads, media, etc.) can be added as needed.
