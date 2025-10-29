@@ -14,7 +14,8 @@ const { authenticate } = require("./middleware/authMiddleware.js");
 connectDB();
 
 const PORT = process.env.PORT || 5000;
-const CLIENT_URLS = (process.env.CLIENT_URL || "http://localhost:5174")
+// Support both common Vite ports by default; can be overridden via CLIENT_URL
+const CLIENT_URLS = (process.env.CLIENT_URL || "http://localhost:5173,http://localhost:5174")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);

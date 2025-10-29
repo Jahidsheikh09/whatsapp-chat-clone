@@ -61,6 +61,19 @@ function initSocket(server, corsOrigin) {
     await User.findByIdAndUpdate(userId, { isOnline: true });
     socket.broadcast.emit("user:presence", { userId, isOnline: true, lastSeen: null });
 
+    // Join the socket to rooms for each chat the user is a member of.
+    // This makes emitting to a chat reliable even if users have multiple sockets.
+    try {
+      const userChats = await Chat.find({ members: userId }).select("_id");
+      for (const c of userChats) {
+        const room = c._id.toString();
+        socket.join(room);
+        console.info(`[sockets] socket=${socket.id} joined room=${room}`);
+      }
+    } catch (err) {
+      console.warn(`[sockets] failed to join rooms for user=${userId}:`, err.message || err);
+    }
+
     socket.on("typing", ({ chatId, typing }) => {
       Chat.findById(chatId).then((chat) => {
         if (!chat) return;
@@ -119,11 +132,19 @@ function initSocket(server, corsOrigin) {
           updatedAt: message.updatedAt,
         };
 
-        // Emit normalized message to all members (including sender)
+        // Emit to the chat room AND directly to each member's sockets to ensure delivery
+        // even if a user hasn't joined the room yet (e.g., newly created chats).
+        try {
+          io.to(outMsg.chat).emit("message:new", outMsg);
+          console.info(`[sockets] emitted message ${outMsg.id} to room=${outMsg.chat}`);
+        } catch (err) {
+          console.warn(`[sockets] failed to emit to room=${outMsg.chat}:`, err.message || err);
+        }
+        // Always emit directly to members as a reliability measure
         chat.members.forEach((m) => {
           const target = m.toString();
           const sockets = userIdToSockets.get(target);
-          console.info(`[sockets] emit message ${outMsg.id} to user=${target} sockets=${sockets ? sockets.size : 0}`);
+          console.info(`[sockets] emit message ${outMsg.id} directly to user=${target} sockets=${sockets ? sockets.size : 0}`);
           emitToUser(io, target, "message:new", outMsg);
         });
 
@@ -131,6 +152,18 @@ function initSocket(server, corsOrigin) {
         ack?.({ ok: true, message: outMsg });
       } catch (e) {
         ack?.({ error: "Server error" });
+      }
+    });
+
+    // Allow clients to request joining a chat room dynamically
+    socket.on("chat:join", (chatId) => {
+      if (!chatId) return;
+      try {
+        const room = String(chatId);
+        socket.join(room);
+        console.info(`[sockets] socket=${socket.id} joined room=${room} via chat:join`);
+      } catch (err) {
+        console.warn(`[sockets] chat:join failed for socket=${socket.id} chat=${chatId}:`, err.message || err);
       }
     });
 

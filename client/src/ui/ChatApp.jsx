@@ -46,9 +46,17 @@ export default function ChatApp({ socket }) {
     async function loadChats() {
       try {
         const data = await apiGet("/api/chats", token);
-        setChats(data);
-        if (data.length > 0 && !active) {
-          setActive(data[0]);
+        // Ensure we always keep chats as an array. Some APIs may return
+        // a single object in edge cases — coerce to array to avoid runtime
+        // errors where .map/.some are expected.
+        if (Array.isArray(data)) {
+          setChats(data);
+          if (data.length > 0 && !active) setActive(data[0]);
+        } else if (data) {
+          setChats([data]);
+          if (!active) setActive(data);
+        } else {
+          setChats([]);
         }
       } catch (err) {
         console.error("Failed to load chats:", err);
@@ -64,19 +72,37 @@ export default function ChatApp({ socket }) {
       setMessages([]);
       return;
     }
+    // Ensure our socket is subscribed to the active chat room for reliable room broadcasts
+    try {
+      if (socket) {
+        socket.emit("chat:join", active.id || active._id);
+      }
+    } catch {}
     async function loadMessages() {
       try {
         const data = await apiGet(
           `/api/chats/${active.id || active._id}/messages`,
           token
         );
-        setMessages(data);
+        // Ensure messages is always an array
+        if (Array.isArray(data)) setMessages(data);
+        else if (data) setMessages([data]);
+        else setMessages([]);
       } catch (err) {
         console.error("Failed to load messages:", err);
       }
     }
     loadMessages();
   }, [active, token]);
+
+  // When socket connects or chats list changes, join all chat rooms to guarantee delivery
+  useEffect(() => {
+    if (!socket) return;
+    if (!Array.isArray(chats) || chats.length === 0) return;
+    try {
+      chats.forEach((c) => socket.emit("chat:join", c.id || c._id));
+    } catch {}
+  }, [socket, chats]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -106,48 +132,53 @@ export default function ChatApp({ socket }) {
       const chatId = message.chat || message.chatId;
 
       if (String(chatId) === String(active?.id || active?._id) && active) {
-        setMessages((prev) => {
-          const exists = prev.some(
-            (m) => String(m.id || m._id) === String(message.id || message._id)
-          );
-          if (exists) return prev;
-          return [...prev, message];
-        });
+          setMessages((prev) => {
+            const list = Array.isArray(prev) ? prev : [];
+            const exists = list.some(
+              (m) => String(m.id || m._id) === String(message.id || message._id)
+            );
+            if (exists) return list;
+            return [...list, message];
+          });
       }
 
       setChats((prev) => {
-        const exists = prev.some((c) => String(c.id || c._id) === String(chatId));
+        const list = Array.isArray(prev) ? prev : [];
+        const exists = list.some((c) => String(c.id || c._id) === String(chatId));
         if (exists) {
-          return prev.map((c) =>
+          return list.map((c) =>
             String(c.id || c._id) === String(chatId) ? { ...c, lastMessage: message } : c
           );
         }
 
+        // Chat not found locally — fetch it and prepend when available.
         (async () => {
           try {
             const chat = await apiGet(`/api/chats/${chatId}`, token);
-            setChats((cur) => [chat, ...cur]);
+            setChats((cur) => (Array.isArray(cur) ? [chat, ...cur] : [chat]));
           } catch (err) {
             console.error("Failed to fetch chat for incoming message:", err);
           }
         })();
-        return prev;
+        return list;
       });
     }
 
     function handleTypingEvent(data) {
-      setChats((prev) =>
-        prev.map((c) =>
+      setChats((prev) => {
+        const list = Array.isArray(prev) ? prev : [];
+        return list.map((c) =>
           (c.id || c._id) === data.chatId ? { ...c, typing: data.typing } : c
-        )
-      );
+        );
+      });
     }
 
     socket.on("message:new", handleNewMessage);
     socket.on("typing", handleTypingEvent);
     socket.on("user:presence", (data) => {
-      setChats((prev) =>
-        prev.map((c) =>
+      setChats((prev) => {
+        const list = Array.isArray(prev) ? prev : [];
+        return list.map((c) =>
           c.members?.some((m) => m.id === data.userId || m._id === data.userId)
             ? {
                 ...c,
@@ -158,8 +189,8 @@ export default function ChatApp({ socket }) {
                 ),
               }
             : c
-        )
-      );
+        );
+      });
     });
 
     return () => {
@@ -197,21 +228,28 @@ export default function ChatApp({ socket }) {
         (ack) => {
           if (ack && ack.ok && ack.message) {
             setMessages((prev) => {
+              const list = Array.isArray(prev) ? prev : [];
               const realId = ack.message.id || ack.message._id;
-              const already = prev.some((m) => String(m.id || m._id) === String(realId));
+              const already = list.some((m) => String(m.id || m._id) === String(realId));
               if (already) {
-                return prev.filter((m) => m.id !== tempId);
+                return list.filter((m) => m.id !== tempId);
               }
-              return prev.map((m) => (m.id === tempId ? ack.message : m));
+              return list.map((m) => (m.id === tempId ? ack.message : m));
             });
           } else if (ack && ack.error) {
-            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+            setMessages((prev) => {
+              const list = Array.isArray(prev) ? prev : [];
+              return list.filter((m) => m.id !== tempId);
+            });
             alert("Message failed: " + ack.error);
           }
         }
       );
     } catch (err) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setMessages((prev) => {
+        const list = Array.isArray(prev) ? prev : [];
+        return list.filter((m) => m.id !== tempId);
+      });
       console.error("Failed to send message:", err);
     }
   }
@@ -229,8 +267,9 @@ export default function ChatApp({ socket }) {
         { memberIds: [userId], isGroup: false },
         token
       );
-      setChats((prev) => [chat, ...prev]);
+      setChats((prev) => (Array.isArray(prev) ? [chat, ...prev] : [chat]));
       setActive(chat);
+      try { socket?.emit("chat:join", chat.id || chat._id); } catch {}
       setQuery("");
       setSearchResults([]);
     } catch (err) {
@@ -250,8 +289,9 @@ export default function ChatApp({ socket }) {
         },
         token
       );
-      setChats((prev) => [chat, ...prev]);
+      setChats((prev) => (Array.isArray(prev) ? [chat, ...prev] : [chat]));
       setActive(chat);
+      try { socket?.emit("chat:join", chat.id || chat._id); } catch {}
       setQuery("");
       setSearchResults([]);
       setGroupMode(false);
@@ -284,7 +324,7 @@ export default function ChatApp({ socket }) {
     return "";
   }
 
-  const safeChats = chats || [];
+  const safeChats = Array.isArray(chats) ? chats : [];
 
   return (
     <div className="layout">
@@ -354,29 +394,29 @@ export default function ChatApp({ socket }) {
           />
           {query && (
             <div style={{ marginTop: 8, maxHeight: 180, overflow: "auto" }}>
-              {searching && <div className="typing">Searching…</div>}
-              {!searching && searchResults.length === 0 && (
-                <div className="typing">No users found</div>
-              )}
-              {!searching && searchResults.length > 0 && (
-                <ul className="users">
-                  {searchResults.map((u) => (
-                    <li
-                      key={u.id}
-                      onClick={() =>
-                        groupMode ? toggleSelectMember(u.id) : createOneToOne(u.id)
-                      }
-                      className={
-                        groupMode && selectedMembers.includes(u.id) ? "self" : ""
-                      }
-                      style={{ cursor: "pointer" }}
-                    >
-                      {u.name || u.username}{" "}
-                      <span style={{ color: "var(--subtext)" }}>@{u.username}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                  {searching && <div className="typing">Searching…</div>}
+                  {!searching && searchResults.length === 0 && (
+                    <div className="typing">No users found</div>
+                  )}
+                  {!searching && searchResults.length > 0 && (
+                    <ul className="users">
+                      {searchResults.map((u, i) => (
+                        <li
+                          key={u.id || u._id || u.username || i}
+                          onClick={() =>
+                            groupMode ? toggleSelectMember(u.id || u._id) : createOneToOne(u.id || u._id)
+                          }
+                          className={
+                            groupMode && selectedMembers.includes(u.id || u._id) ? "self" : ""
+                          }
+                          style={{ cursor: "pointer" }}
+                        >
+                          {u.name || u.username} {" "}
+                          <span style={{ color: "var(--subtext)" }}>@{u.username}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
               {groupMode && (
                 <div style={{ padding: "8px 0" }}>
                   <input
@@ -399,11 +439,11 @@ export default function ChatApp({ socket }) {
               No chats yet. Search for users to start a conversation.
             </li>
           ) : (
-            safeChats.map((c) => (
+            safeChats.map((c, i) => (
               <li
-                key={c.id || c._id}
+                key={c.id || c._id || c.name || i}
                 onClick={() => setActive(c)}
-                className={active?.id === c.id ? "self" : ""}
+                className={active?.id === (c.id || c._id) ? "self" : ""}
                 style={{ cursor: "pointer" }}
               >
                 {getChatTitle(c)} {c.typing ? "…typing" : ""}
@@ -435,7 +475,7 @@ export default function ChatApp({ socket }) {
         </header>
         <div className="messages">
           {active &&
-            messages.map((m) => {
+              (Array.isArray(messages) ? messages : []).map((m) => {
               const isMine = String(m.sender) === String(user?.id);
               return (
                 <div key={m.id || m._id} className={`msg ${isMine ? "mine" : ""}`}>
