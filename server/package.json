@@ -6,8 +6,7 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js",
-    "build": "cd .. && cd client && npm install && npm run build && npx rimraf ../server/dist && npx copyfiles -u 1 dist/**/* ../server/"
+    "start": "node src/index.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
