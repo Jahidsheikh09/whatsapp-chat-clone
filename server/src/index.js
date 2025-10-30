@@ -10,12 +10,15 @@ const connectDB = require("./config/db.js");
 const { initSocket } = require("./sockets/index.js");
 const { errorHandler } = require("./middleware/errorMiddleware.js");
 const { authenticate } = require("./middleware/authMiddleware.js");
+const path = require("path");
 
 connectDB();
 
 const PORT = process.env.PORT || 5000;
 // Support both common Vite ports by default; can be overridden via CLIENT_URL
-const CLIENT_URLS = (process.env.CLIENT_URL || "http://localhost:5173,http://localhost:5174")
+const CLIENT_URLS = (
+  process.env.CLIENT_URL || "http://localhost:5173,http://localhost:5174"
+)
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
@@ -44,6 +47,9 @@ app.get("/health", (req, res) => {
 // API routes
 app.use("/api/users", require("./routes/userRoutes.js"));
 app.use("/api/chats", authenticate, require("./routes/chatRoutes.js"));
+
+app.use(express.static(path.join(__dirname, "dist")));
+app.get("*", (req, res) => res.sendFile(path.resolve(__dirname, "dist", "index.html")));
 
 const server = http.createServer(app);
 
