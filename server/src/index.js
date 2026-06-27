@@ -93,13 +93,15 @@ function createApp() {
 
 const app = createApp();
 
-if (process.env.VERCEL || process.env.NODE_ENV === "production" || require.main !== module) {
+if (process.env.VERCEL) {
   module.exports = app;
-} else {
+} else if (require.main === module) {
   const server = http.createServer(app);
   initSocket(server, CLIENT_URLS);
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
   module.exports = server;
+} else {
+  module.exports = app;
 }
