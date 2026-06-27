@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { apiGet, apiPost, apiPut } from '../lib/api'
 
 const AuthContext = createContext(null)
@@ -32,6 +32,10 @@ export function AuthProvider({ children }) {
     })
   }, [token])
 
+  const setTokenFromOAuth = useCallback((oauthToken) => {
+    setToken(oauthToken)
+  }, [])
+
   async function register(data) {
     const res = await apiPost('/api/users/register', data)
     setToken(res.token)
@@ -40,12 +44,6 @@ export function AuthProvider({ children }) {
 
   async function login(data) {
     const res = await apiPost('/api/users/login', data)
-    setToken(res.token)
-    setUser(res.user)
-  }
-
-  async function googleLogin(credential) {
-    const res = await apiPost('/api/users/google', { credential })
     setToken(res.token)
     setUser(res.user)
   }
@@ -61,10 +59,11 @@ export function AuthProvider({ children }) {
     return updated
   }
 
-  const value = useMemo(() => ({ token, user, isAuthed, loading, register, login, googleLogin, logout, updateProfile }), [token, user, isAuthed, loading])
+  const value = useMemo(
+    () => ({ token, user, isAuthed, loading, register, login, logout, updateProfile, setTokenFromOAuth }),
+    [token, user, isAuthed, loading, setTokenFromOAuth]
+  )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() { return useContext(AuthContext) }
-
-

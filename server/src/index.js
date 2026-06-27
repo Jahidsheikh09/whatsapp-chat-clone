@@ -1,4 +1,5 @@
 const express = require("express");
+const passport = require("passport");
 const dotenv = require("dotenv").config();
 const color = require("colors");
 const http = require("http");
@@ -12,19 +13,29 @@ require("./models");
 const { initSocket } = require("./sockets/index.js");
 const { errorHandler } = require("./middleware/errorMiddleware.js");
 const { authenticate } = require("./middleware/authMiddleware.js");
+const { configurePassport } = require("./config/passport.js");
 const path = require("path");
 
 connectDB().catch((error) => {
   console.error("Database startup failed:", error.message);
 });
 
+configurePassport();
+
 const PORT = process.env.PORT || 5000;
-const CLIENT_URLS = (
-  process.env.CLIENT_URL || "http://localhost:5173,http://localhost:5174"
-)
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+
+function getClientUrls() {
+  const fromEnv = (process.env.CLIENT_URL || "http://localhost:5173,http://localhost:5174")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (process.env.VERCEL_URL) {
+    fromEnv.push(`https://${process.env.VERCEL_URL}`);
+  }
+  return [...new Set(fromEnv)];
+}
+
+const CLIENT_URLS = getClientUrls();
 
 function createApp() {
   const app = express();
@@ -38,25 +49,42 @@ function createApp() {
       credentials: true,
     })
   );
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
+          frameSrc: ["'self'", "https://accounts.google.com"],
+          connectSrc: ["'self'", "https://accounts.google.com"],
+          imgSrc: ["'self'", "data:", "https:", "blob:"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
+        },
+      },
+      crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    })
+  );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(morgan("dev"));
   app.use(rateLimit({ windowMs: 60_000, max: 120 }));
+  app.use(passport.initialize());
 
   app.get("/health", (req, res) => {
     res.json({ status: "ok" });
   });
 
+  app.use("/api/auth", require("./routes/authRoutes.js"));
   app.use("/api/users", require("./routes/userRoutes.js"));
   app.use("/api/chats", authenticate, require("./routes/chatRoutes.js"));
 
   const distPath = path.resolve(__dirname, "../dist");
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get("*", (req, res) => res.sendFile(path.resolve(distPath, "index.html")));
-  } else {
-    app.get("*", (req, res) => res.status(404).json({ error: "Not found" }));
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) return next();
+      res.sendFile(path.resolve(distPath, "index.html"));
+    });
   }
 
   app.use(errorHandler);

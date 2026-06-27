@@ -1,22 +1,19 @@
-# WhatsApp-Style Chat App (React + Node + Socket.IO + MongoDB)
+# WhatsApp-Style Chat App (React + Node + Socket.IO + PostgreSQL)
 
-A full-stack real-time chat application with authentication, one-to-one chats, group chats, message delivery/seen ticks, typing indicators, and presence. Built for clarity and interview-friendly readability.
+A full-stack real-time chat application with authentication (email + Google), one-to-one chats, group chats, message delivery/seen ticks, typing indicators, and presence.
 
 ## Tech Stack
-- Client: React 18 (Vite), Context API, `socket.io-client`
-- Server: Node.js, Express, Socket.IO, JWT auth, MongoDB (Mongoose)
+- Client: React 18 (Vite), Context API, `socket.io-client`, Google Sign-In
+- Server: Node.js, Express, Socket.IO, JWT auth, PostgreSQL (Sequelize)
 - Tooling: Vite, Nodemon, Helmet, CORS, Rate limiting
 
 ## Features
-- Authentication (register/login) with JWT, persistent session via `Authorization: Bearer`
+- Authentication: register/login with email + password, or sign in with Google
+- Google accounts auto-register on first sign-in (email from Google profile)
+- JWT session via `Authorization: Bearer`
 - One-to-one chats and group chats
 - Realtime messaging via Socket.IO (one-to-one and group)
-- Delivery and seen ticks on messages (sent, delivered, seen)
-- Typing indicators
-- Presence/online status and last seen
-- Chat header shows avatar, name, and presence; list shows names with unread badges
-- Group management (create group, view members, remove members if admin)
-- User search to start chats or add to groups
+- Delivery and seen ticks, typing indicators, presence/online status
 - Profile update (name, avatar)
 - Responsive WhatsApp-like UI
 
@@ -46,60 +43,61 @@ whatsapp-Clone/
 
 ## Prerequisites
 - Node.js 18+
-- MongoDB (local or cloud). Docker optional
-- Windows PowerShell (commands below are Windows-friendly)
+- PostgreSQL database (Neon, Supabase, Railway, or local)
+- Google Cloud OAuth Client ID (for Google Sign-In)
 
 ## Environment Variables
 
-Server (`server/.env`):
+Server (`server/.env` — copy from `server/.env.example`):
 ```
 PORT=5000
-MONGO_URI=mongodb+srv://<username>:<password>@<cluster>/<db>?retryWrites=true&w=majority
+DATABASE_URL=postgresql://user:password@host:5432/dbname
 JWT_SECRET=replace_with_a_long_random_secret
-# comma-separated client origins allowed by CORS (dev defaults also include 5173,5174)
 CLIENT_URL=http://localhost:5173,http://localhost:5174
+GOOGLE_CLIENT_ID=your-id.apps.googleusercontent.com
 ```
 
-Client (`client/.env`):
+Client (`client/.env` — copy from `client/.env.example`):
 ```
 VITE_SERVER_URL=http://localhost:5000
-# Optional; if omitted, API falls back to VITE_SERVER_URL
 VITE_API_URL=http://localhost:5000
+VITE_GOOGLE_CLIENT_ID=your-id.apps.googleusercontent.com
 ```
 
-MongoDB Atlas notes:
-- Create a database user and get your connection string from Atlas.
-- Replace `<username>`, `<password>`, `<cluster>`, and `<db>` in `MONGO_URI`.
-- Ensure your IP is allowlisted in Atlas Network Access for development.
+### Google Sign-In setup
+1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+2. Create an **OAuth 2.0 Client ID** (Web application)
+3. Add **Authorized JavaScript origins**:
+   - `http://localhost:5173` (local dev)
+   - `https://your-app.vercel.app` (production)
+4. Copy the Client ID into both `GOOGLE_CLIENT_ID` (server) and `VITE_GOOGLE_CLIENT_ID` (client)
 
-## Install & Run (Windows PowerShell)
+## Install & Run
 
-1) Start the API/Socket server
+1) Install dependencies and start the server
 ```
 cd server
-Copy-Item .env.example .env -ErrorAction SilentlyContinue
-# or create .env with the variables above
+Copy-Item .env.example .env
 npm install
 npm run dev   # http://localhost:5000
 ```
 
-2) Start the web client
+2) Start the web client (new terminal)
 ```
-cd ../client
-# create client .env if needed
+cd client
+Copy-Item .env.example .env
 npm install
 npm run dev   # http://localhost:5173
 ```
 
-3) Open the app at http://localhost:5173
-
-Optional: run MongoDB with Docker
-```
-# example (adjust to your preference)
-docker run -d --name mongo -p 27017:27017 mongo:7
-```
+3) Open http://localhost:5173 — register, login with email, or use **Sign in with Google**
 
 ## Scripts
+
+Root (`package.json`):
+- `npm run install:all` — install client + server dependencies
+- `npm run build` — build client and copy to `server/dist` (for Vercel)
+- `npm run dev:client` / `npm run dev:server` — run either side
 
 Client (`client/package.json`):
 - `npm run dev`: start Vite dev server (5173)
@@ -114,8 +112,8 @@ Server (`server/package.json`):
 
 ### Auth flow
 - Register/Login via REST (`/api/users/register`, `/api/users/login`)
-- Client stores token and attaches as `Authorization: Bearer <token>`
-- Protected routes validated by middleware on the server
+- Google Sign-In via `/api/users/google` (auto-creates account on first login)
+- Client stores JWT and attaches as `Authorization: Bearer <token>`
 
 ### Chats and messages
 - Client loads chats: `GET /api/chats`
@@ -134,6 +132,7 @@ Server (`server/package.json`):
 ## REST API (summary)
 - `POST /api/users/register`
 - `POST /api/users/login`
+- `POST /api/users/google`
 - `GET  /api/users/me`
 - `GET  /api/users?q=<term>`
 - `GET  /api/chats`
@@ -179,10 +178,28 @@ If messages show only on the sender side:
 - Ensure the server logs show sockets joining rooms on connect and via `chat:join`.
 - Confirm `CLIENT_URL` includes your client origin.
 
-## Deployment
-- Deploy the server (Node/Express) to a platform like Render, Railway, or Vercel Functions with WebSockets support.
-- Set `MONGO_URI` to your Atlas URI, `JWT_SECRET` to a strong value, and `CLIENT_URL` to your deployed frontend origin.
-- Build the client (`npm run build`) and deploy the `client/dist` output to a static host (Vercel/Netlify/S3+CloudFront).
+## Deployment (Vercel)
+
+This repo is configured for a **single Vercel deployment** (API + React app on one domain).
+
+1. Push to GitHub and import the repo in [Vercel](https://vercel.com)
+2. Set **Root Directory** to the repo root (not `client/` or `server/`)
+3. Vercel uses `vercel.json` — install runs `npm run install:all`, build runs `npm run build`
+4. Add these **Environment Variables** in Vercel:
+
+| Variable | Notes |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | Long random secret |
+| `GOOGLE_CLIENT_ID` | Same as Google OAuth Client ID |
+| `VITE_GOOGLE_CLIENT_ID` | Same value (embedded at build time) |
+| `CLIENT_URL` | Your Vercel URL, e.g. `https://your-app.vercel.app` |
+
+5. Redeploy after adding env vars (client needs `VITE_GOOGLE_CLIENT_ID` at build time)
+
+**Note:** Vercel serverless functions do **not** support persistent WebSocket connections. REST API, auth, and Google login work on Vercel; real-time chat (Socket.IO) requires a long-running server (Railway, Render, Fly.io, etc.) or a separate WebSocket service.
+
+For full real-time chat in production, deploy the server to Railway/Render and set `VITE_SERVER_URL` / `VITE_API_URL` to that URL when building the client.
 
 ## Roadmap / Optional Features
 - File and image upload in chat (store as message.media)

@@ -1,13 +1,45 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { io } from 'socket.io-client'
 import { AuthProvider, useAuth } from '../context/AuthContext.jsx'
 import AuthPage from '../ui/AuthPage.jsx'
 import ChatApp from '../ui/ChatApp.jsx'
 
-const WS_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'
+const WS_URL =
+  import.meta.env.VITE_SERVER_URL ||
+  (import.meta.env.PROD ? window.location.origin : 'http://localhost:5000')
+
+const GOOGLE_ERRORS = {
+  google_auth_failed: 'Google sign-in failed. Please try again.',
+  google_not_configured: 'Google sign-in is not configured on the server.',
+}
 
 function Inner() {
-  const { isAuthed, token, loading } = useAuth()
+  const { isAuthed, token, loading, setTokenFromOAuth } = useAuth()
+  const [oauthError, setOauthError] = useState('')
+
+  useEffect(() => {
+    const path = window.location.pathname
+    const params = new URLSearchParams(window.location.search)
+
+    if (path === '/auth/callback') {
+      const oauthToken = params.get('token')
+      if (oauthToken) {
+        setTokenFromOAuth(oauthToken)
+        window.history.replaceState({}, '', '/')
+      } else {
+        setOauthError('Google sign-in did not return a token.')
+        window.history.replaceState({}, '', '/')
+      }
+      return
+    }
+
+    const error = params.get('error')
+    if (error && GOOGLE_ERRORS[error]) {
+      setOauthError(GOOGLE_ERRORS[error])
+      window.history.replaceState({}, '', '/')
+    }
+  }, [setTokenFromOAuth])
+
   const socket = useMemo(() => {
     if (!token) return null
     return io(WS_URL, { withCredentials: true, auth: { token } })
@@ -30,7 +62,7 @@ function Inner() {
     )
   }
 
-  if (!isAuthed) return <AuthPage />
+  if (!isAuthed) return <AuthPage initialError={oauthError} />
   return <ChatApp socket={socket} />
 }
 
@@ -41,5 +73,3 @@ export default function App() {
     </AuthProvider>
   )
 }
-
-

@@ -17,6 +17,39 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: system
 .card { background: var(--panel); padding: 24px; border-radius: 12px; width: 100%; max-width: 380px; display: grid; gap: 12px; }
 .card h1 { margin: 0; font-size: 24px; }
 .card p { margin: 0 0 8px; color: var(--subtext); }
+.auth-error { color: #f87171; font-size: 14px; }
+.auth-link { background: transparent !important; color: var(--subtext) !important; }
+.auth-subtitle { color: var(--subtext); margin: 0; font-size: 14px; }
+.auth-card { display: grid; gap: 12px; }
+.auth-form { display: grid; gap: 12px; }
+.auth-divider { display: flex; align-items: center; gap: 12px; color: var(--subtext); font-size: 13px; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--panel-2); }
+.google-signin-block { position: relative; width: 100%; }
+.google-signin-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+  background: #fff;
+  color: #3c4043;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.google-signin-btn:hover { filter: brightness(0.97); }
+.google-signin-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.google-btn-native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.google-btn-native--ready { pointer-events: none; }
 input { padding: 12px 14px; border-radius: 8px; border: 1px solid var(--panel-2); background: var(--panel-2); color: var(--text); }
 button { padding: 10px 14px; border-radius: 8px; border: none; background: var(--accent); color: white; cursor: pointer; }
 button:hover { filter: brightness(1.05); }

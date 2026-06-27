@@ -1,9 +1,10 @@
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const asyncHandler = require("express-async-handler");
 const { Op } = require("sequelize");
 const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/userModel");
+const { findOrCreateGoogleUser } = require("../services/googleUserService");
+const { generateToken, mapUser } = require("../utils/authUtils");
 
 const googleClient = process.env.GOOGLE_CLIENT_ID
   ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
@@ -62,6 +63,11 @@ const loginUser = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({ where: { email } });
 
+  if (user && !user.password && user.provider === "google") {
+    res.status(400);
+    throw new Error("This account uses Google sign-in. Please use the Google button.");
+  }
+
   if (user && user.password && (await bcrypt.compare(password, user.password))) {
     res.json({
       message: "Login User Successfully",
@@ -74,7 +80,7 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 });
 
-//@desc    Authenticate a User with Google
+//@desc    Authenticate a User with Google (One Tap / GIS token)
 //@route   POST /api/users/google
 //@access  Public
 const googleLoginUser = asyncHandler(async (req, res) => {
@@ -96,44 +102,12 @@ const googleLoginUser = asyncHandler(async (req, res) => {
   });
   const payload = ticket.getPayload();
 
-  if (!payload?.email) {
-    res.status(400);
-    throw new Error("Google account email is required");
-  }
-
-  let user = await User.findOne({
-    where: {
-      [Op.or]: [{ email: payload.email }, { googleId: payload.sub }],
-    },
+  const user = await findOrCreateGoogleUser({
+    id: payload.sub,
+    displayName: payload.name,
+    emails: [{ value: payload.email }],
+    photos: [{ value: payload.picture }],
   });
-
-  if (!user) {
-    const baseUsername = (payload.email || "google-user").split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "") || "google-user";
-    let username = baseUsername;
-    let suffix = 1;
-
-    while (await User.findOne({ where: { username } })) {
-      username = `${baseUsername}${suffix}`;
-      suffix += 1;
-    }
-
-    user = await User.create({
-      username,
-      email: payload.email,
-      name: payload.name || payload.email,
-      avatarUrl: payload.picture || "",
-      provider: "google",
-      googleId: payload.sub,
-      password: null,
-    });
-  } else if (!user.googleId || user.provider !== "google") {
-    await user.update({
-      provider: "google",
-      googleId: payload.sub,
-      name: payload.name || user.name || payload.email,
-      avatarUrl: payload.picture || user.avatarUrl || "",
-    });
-  }
 
   res.json({
     message: "Login User Successfully",
@@ -182,27 +156,6 @@ const getUsers = asyncHandler(async (req, res) => {
   });
   res.json(users.map(mapUser));
 });
-
-function mapUser(user) {
-  if (!user) return null;
-  return {
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    name: user.name,
-    avatarUrl: user.avatarUrl,
-    provider: user.provider,
-    isOnline: user.isOnline,
-    lastSeen: user.lastSeen,
-  };
-}
-
-// Generate JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: "30d",
-  });
-};
 
 module.exports = {
   registerUser,
