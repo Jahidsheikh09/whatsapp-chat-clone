@@ -14,7 +14,9 @@ const { errorHandler } = require("./middleware/errorMiddleware.js");
 const { authenticate } = require("./middleware/authMiddleware.js");
 const path = require("path");
 
-connectDB();
+connectDB().catch((error) => {
+  console.error("Database startup failed:", error.message);
+});
 
 const PORT = process.env.PORT || 5000;
 const CLIENT_URLS = (
@@ -62,13 +64,14 @@ function createApp() {
 }
 
 const app = createApp();
-const server = http.createServer(app);
-initSocket(server, CLIENT_URLS);
 
-if (require.main === module) {
+if (process.env.VERCEL || process.env.NODE_ENV === "production" || require.main !== module) {
+  module.exports = app;
+} else {
+  const server = http.createServer(app);
+  initSocket(server, CLIENT_URLS);
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+  module.exports = server;
 }
-
-module.exports = app;
