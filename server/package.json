@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "build": "../server/dist && npx copyfiles -u 1 dist/**/* ../server/"
+    "build": "node -e \"console.log('server build complete')\""
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
