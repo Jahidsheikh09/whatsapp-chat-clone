@@ -1,17 +1,22 @@
-const mongoose = require("mongoose");
+const { Sequelize } = require("sequelize");
+
+const sequelize = new Sequelize(process.env.DATABASE_URL || process.env.POSTGRES_URI, {
+  dialect: "postgres",
+  logging: false,
+  dialectOptions: {
+    ssl: process.env.NODE_ENV === "production" ? { require: true, rejectUnauthorized: false } : false,
+  },
+});
 
 const connectDB = async () => {
   try {
-    mongoose.set("strictQuery", true);
-    const conn = await mongoose.connect(process.env.MONGO_URI);
-    console.log(
-      `MongoDB Connected : ${conn.connection.host}/${conn.connection.name}`.magenta
-        .underline.bold
-    );
+    await sequelize.authenticate();
+    await sequelize.sync({ alter: true });
+    console.log(`PostgreSQL Connected : ${process.env.DATABASE_URL || process.env.POSTGRES_URI}`.magenta.underline.bold);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     process.exit(1);
   }
 };
 
-module.exports = connectDB;
+module.exports = { sequelize, connectDB };

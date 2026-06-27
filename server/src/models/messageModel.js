@@ -1,30 +1,17 @@
-const mongoose = require("mongoose");
-const C = require("../../constants");
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/db");
 
-const ObjectId = mongoose.SchemaTypes.ObjectId;
-const required = [true, C.FIELD_IS_REQ];
-
-const MediaSchema = new mongoose.Schema(
+const Message = sequelize.define(
+  "Message",
   {
-    url: String,
-    mime: String,
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    chatId: { type: DataTypes.UUID, allowNull: false },
+    senderId: { type: DataTypes.UUID, allowNull: false },
+    content: { type: DataTypes.TEXT, allowNull: true, defaultValue: "" },
+    media: { type: DataTypes.JSON, allowNull: true, defaultValue: [] },
+    status: { type: DataTypes.JSON, allowNull: true, defaultValue: {} },
   },
-  { _id: false }
+  { timestamps: true, tableName: "messages" }
 );
 
-const MessageSchema = new mongoose.Schema(
-  {
-    chat: { type: ObjectId, ref: "Chat", required, index: true },
-    sender: { type: ObjectId, ref: "User", required, index: true },
-    content: { type: String, default: "" },
-    media: [MediaSchema],
-    status: { type: Map, of: String }, // userId -> 'sent'|'delivered'|'seen'
-    createdAt: { type: Date, default: Date.now },
-  },
-  { timestamps: true, versionKey: false }
-);
-
-MessageSchema.index({ chat: 1, createdAt: -1 });
-
-const Message = mongoose.model("Message", MessageSchema);
 module.exports = Message;

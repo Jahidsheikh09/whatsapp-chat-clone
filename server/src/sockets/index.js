@@ -1,5 +1,7 @@
 const Server = require("socket.io").Server;
 const jwt = require("jsonwebtoken");
+const { Op } = require("sequelize");
+require("../models");
 const User = require("../models/userModel");
 const Chat = require("../models/chatModel");
 const Message = require("../models/messageModel");
@@ -72,15 +74,15 @@ function initSocket(server, corsOrigin) {
     addUserSocket(userId, socket.id);
     console.info(`[sockets] connected user=${userId} socket=${socket.id}`);
 
-    await User.findByIdAndUpdate(userId, { isOnline: true });
+    await User.update({ isOnline: true }, { where: { id: userId } });
     socket.broadcast.emit("user:presence", { userId, isOnline: true, lastSeen: null });
 
     // Join the socket to rooms for each chat the user is a member of.
     // This makes emitting to a chat reliable even if users have multiple sockets.
     try {
-      const userChats = await Chat.find({ members: userId }).select("_id");
-      for (const c of userChats) {
-        const room = c._id.toString();
+      const userChats = await Chat.findAll({ include: [{ model: User, as: "members", attributes: ["id"] }] });
+      for (const c of userChats.filter((chat) => (chat.members || []).some((member) => String(member.id) === String(userId)))) {
+        const room = c.id;
         socket.join(room);
         console.info(`[sockets] socket=${socket.id} joined room=${room}`);
       }
@@ -89,11 +91,11 @@ function initSocket(server, corsOrigin) {
     }
 
     socket.on("typing", ({ chatId, typing }) => {
-      Chat.findById(chatId).then((chat) => {
+      Chat.findByPk(chatId, { include: [{ model: User, as: "members", attributes: ["id"] }] }).then((chat) => {
         if (!chat) return;
-        chat.members.forEach((mid) => {
-          if (mid.toString() !== userId)
-            emitToUser(io, mid.toString(), "typing", {
+        (chat.members || []).forEach((member) => {
+          if (String(member.id) !== String(userId))
+            emitToUser(io, String(member.id), "typing", {
               chatId,
               userId,
               typing: !!typing,
@@ -105,23 +107,23 @@ function initSocket(server, corsOrigin) {
     socket.on("message:send", async (data, ack) => {
       try {
         const { chatId, content, media = [] } = data;
-        const chat = await Chat.findById(chatId);
-        if (!chat || !chat.members.map(String).includes(userId))
+        const chat = await Chat.findByPk(chatId, { include: [{ model: User, as: "members", attributes: ["id"] }] });
+        const memberIds = (chat?.members || []).map((member) => String(member.id));
+        if (!chat || !memberIds.includes(String(userId)))
           return ack?.({ error: "Not a member" });
         const status = {};
-        chat.members.forEach((m) => {
-          if (m.toString() !== userId) status[m.toString()] = "sent";
+        memberIds.forEach((memberId) => {
+          if (memberId !== String(userId)) status[memberId] = "sent";
         });
 
         const message = await Message.create({
-          chat: chat._id,
-          sender: userId,
+          chatId: chat.id,
+          senderId: userId,
           content,
           media,
           status,
         });
-        chat.lastMessage = message._id;
-        await chat.save();
+        await chat.update({ lastMessageId: message.id });
 
         // normalize status (Map or object) to plain object
         const normalizeStatus = (st) => {
@@ -138,32 +140,35 @@ function initSocket(server, corsOrigin) {
         // Prepare a lightweight chat info snapshot for receivers who might not have this chat locally yet
         let chatInfo = null;
         try {
-          const pop = await Chat.findById(chat._id)
-            .populate({ path: "members", select: "username name avatarUrl isOnline lastSeen" })
-            .populate("lastMessage");
+          const pop = await Chat.findByPk(chat.id, {
+            include: [
+              { model: User, as: "members", attributes: ["id", "username", "name", "avatarUrl", "isOnline", "lastSeen"] },
+              { model: Message, as: "lastMessage" },
+            ],
+          });
           chatInfo = {
-            id: pop._id.toString(),
+            id: pop.id,
             isGroup: pop.isGroup,
             name: pop.name,
             avatarUrl: pop.avatarUrl,
             members: (pop.members || []).map((u) => ({
-              id: u._id.toString(),
+              id: u.id,
               username: u.username,
               name: u.name,
               avatarUrl: u.avatarUrl,
               isOnline: u.isOnline,
               lastSeen: u.lastSeen,
             })),
-            admin: pop.admin ? pop.admin.toString() : null,
+            admin: pop.adminId || null,
           };
         } catch (e) {
           // non-fatal; receivers can still fetch via REST
         }
 
         const outMsg = {
-          id: message._id.toString(),
-          chat: message.chat?.toString ? message.chat.toString() : String(message.chat),
-          sender: message.sender?.toString ? message.sender.toString() : String(message.sender),
+          id: message.id,
+          chat: message.chatId,
+          sender: message.senderId,
           content: message.content,
           media: message.media || [],
           status: normalizeStatus(message.status),
@@ -181,8 +186,7 @@ function initSocket(server, corsOrigin) {
           console.warn(`[sockets] failed to emit to room=${outMsg.chat}:`, err.message || err);
         }
         // Always emit directly to members as a reliability measure
-        chat.members.forEach((m) => {
-          const target = m.toString();
+        memberIds.forEach((target) => {
           const sockets = userIdToSockets.get(target);
           console.info(`[sockets] emit message ${outMsg.id} directly to user=${target} sockets=${sockets ? sockets.size : 0}`);
           emitToUser(io, target, "message:new", outMsg);
@@ -208,11 +212,12 @@ function initSocket(server, corsOrigin) {
     });
 
     socket.on("message:delivered", async ({ messageId }) => {
-      const msg = await Message.findById(messageId);
+      const msg = await Message.findByPk(messageId);
       if (!msg) return;
-      msg.status.set(userId, "delivered");
-      await msg.save();
-      emitToUser(io, msg.sender.toString(), "message:status", {
+      const status = { ...(msg.status || {}) };
+      status[userId] = "delivered";
+      await msg.update({ status });
+      emitToUser(io, String(msg.senderId), "message:status", {
         messageId,
         userId,
         status: "delivered",
@@ -220,12 +225,13 @@ function initSocket(server, corsOrigin) {
     });
 
     socket.on("message:seen", async ({ messageIds = [] }) => {
-      const msgs = await Message.find({ _id: { $in: messageIds } });
+      const msgs = await Message.findAll({ where: { id: { [Op.in]: messageIds } } });
       for (const msg of msgs) {
-        msg.status.set(userId, "seen");
-        await msg.save();
-        emitToUser(io, msg.sender.toString(), "message:status", {
-          messageId: msg._id.toString(),
+        const status = { ...(msg.status || {}) };
+        status[userId] = "seen";
+        await msg.update({ status });
+        emitToUser(io, String(msg.senderId), "message:status", {
+          messageId: msg.id,
           userId,
           status: "seen",
         });
@@ -235,7 +241,7 @@ function initSocket(server, corsOrigin) {
     socket.on("disconnect", async () => {
       const uid = removeUserSocket(socket.id);
       if (uid && !userIdToSockets.get(uid)?.size) {
-        await User.findByIdAndUpdate(uid, { isOnline: false, lastSeen: new Date() });
+        await User.update({ isOnline: false, lastSeen: new Date() }, { where: { id: uid } });
         socket.broadcast.emit("user:presence", {
           userId: uid,
           isOnline: false,

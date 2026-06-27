@@ -1,11 +1,39 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 
 export default function AuthPage() {
-  const { login, register } = useAuth()
+  const { login, register, googleLogin } = useAuth()
   const [mode, setMode] = useState('login')
   const [form, setForm] = useState({ email: '', password: '', username: '', name: '' })
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID') return
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    document.body.appendChild(script)
+
+    script.onload = () => {
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => {
+          googleLogin(response.credential).catch(() => setError('Google sign-in failed.'))
+        },
+      })
+      window.google?.accounts.id.renderButton(document.getElementById('google-signin-btn'), {
+        theme: 'outline',
+        size: 'large',
+        width: '100%',
+      })
+    }
+
+    return () => {
+      document.body.removeChild(script)
+    }
+  }, [googleLogin])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -32,6 +60,7 @@ export default function AuthPage() {
         <input type="password" placeholder="Password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
         {error && <div style={{ color: '#f66' }}>{error}</div>}
         <button type="submit">{mode === 'login' ? 'Login' : 'Create account'}</button>
+        <div id="google-signin-btn" style={{ marginTop: '12px' }} />
         <button type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
           style={{ background: 'transparent', color: 'var(--subtext)' }}>
           {mode === 'login' ? 'Create an account' : 'Have an account? Login'}

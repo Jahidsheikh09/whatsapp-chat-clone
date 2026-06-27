@@ -1,33 +1,28 @@
-const mongoose = require("mongoose");
-const C = require("../../constants");
-const required = [true, C.FIELD_IS_REQ];
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/db");
 
-const UserSchema = new mongoose.Schema(
+const User = sequelize.define(
+  "User",
   {
-    username: { type: String, required, unique: true, index: true, trim: true },
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    username: { type: DataTypes.STRING, allowNull: false, unique: true, validate: { notEmpty: true } },
     email: {
-      type: String,
-      required,
+      type: DataTypes.STRING,
+      allowNull: false,
       unique: true,
-      index: true,
-      lowercase: true,
-      match: [
-        /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
-        "Please enter a valid email address",
-      ],
+      validate: {
+        isEmail: true,
+      },
     },
-    password: {
-      type: String,
-      required: true,
-      minlength: [8, "Password must be at least 8 characters long"],
-    },
-    name: { type: String, default: "", trim: true },
-    avatarUrl: { type: String, default: "" },
-    lastSeen: { type: Date, default: null },
-    isOnline: { type: Boolean, default: false },
+    password: { type: DataTypes.STRING, allowNull: true },
+    name: { type: DataTypes.STRING, allowNull: true, defaultValue: "" },
+    avatarUrl: { type: DataTypes.STRING, allowNull: true, defaultValue: "" },
+    lastSeen: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
+    isOnline: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    provider: { type: DataTypes.STRING, allowNull: false, defaultValue: "local" },
+    googleId: { type: DataTypes.STRING, allowNull: true, unique: true },
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true, tableName: "users" }
 );
 
-const User = mongoose.model("User", UserSchema);
 module.exports = User;

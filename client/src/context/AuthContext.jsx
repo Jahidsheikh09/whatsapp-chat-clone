@@ -44,6 +44,12 @@ export function AuthProvider({ children }) {
     setUser(res.user)
   }
 
+  async function googleLogin(credential) {
+    const res = await apiPost('/api/users/google', { credential })
+    setToken(res.token)
+    setUser(res.user)
+  }
+
   function logout() {
     setToken('')
     setUser(null)
@@ -55,7 +61,7 @@ export function AuthProvider({ children }) {
     return updated
   }
 
-  const value = useMemo(() => ({ token, user, isAuthed, loading, register, login, logout, updateProfile }), [token, user, isAuthed, loading])
+  const value = useMemo(() => ({ token, user, isAuthed, loading, register, login, googleLogin, logout, updateProfile }), [token, user, isAuthed, loading])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

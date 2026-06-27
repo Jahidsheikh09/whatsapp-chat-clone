@@ -28,16 +28,17 @@ const authenticate = asyncHandler(async (req, res, next) => {
     throw new Error("Not Authorized!");
   }
 
-  req.user = await User.findById(decode.id)
-    .select("-password")
-    .lean();
-  
-  req.user.id = req.user._id.toString();
+  const user = await User.findByPk(decode.id, {
+    attributes: { exclude: ["password"] },
+  });
 
-  if (!req.user) {
+  if (!user) {
     res.status(404);
     throw new Error("Invalid Token!");
   }
+
+  req.user = user.get({ plain: true });
+  req.user.id = req.user.id;
 
   logData += ` ${req.user.email}`;
 
@@ -54,7 +55,7 @@ const protect = asyncHandler(async (req, res, next) => {
       // Verify Token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       // Get user from the token
-      req.user = await User.findById(decoded.id).select("-password");
+      req.user = await User.findByPk(decoded.id, { attributes: { exclude: ["password"] } });
       next();
     }
   } catch (error) {
