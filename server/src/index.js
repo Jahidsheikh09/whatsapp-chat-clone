@@ -18,11 +18,18 @@ const path = require("path");
 
 connectDB().catch((error) => {
   console.error("Database startup failed:", error.message);
+  process.exit(1);
 });
 
 configurePassport();
 
 const PORT = process.env.PORT || 5000;
+
+console.log("Starting backend server...");
+console.log("PORT:", PORT);
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("DATABASE_URL set:", !!process.env.DATABASE_URL);
+console.log("JWT_SECRET set:", !!process.env.JWT_SECRET);
 
 function getClientUrls() {
   const fromEnv = (process.env.CLIENT_URL || "http://localhost:5173,http://localhost:5174")

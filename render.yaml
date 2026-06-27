@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: whatsapp-chat-clone-server
+    env: node
+    region: oregon
+    plan: starter
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
