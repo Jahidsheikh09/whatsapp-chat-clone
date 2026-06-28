@@ -184,14 +184,40 @@ function createApp() {
 
 const app = createApp();
 
+// Global error handlers to prevent silent crashes
+process.on("uncaughtException", (error) => {
+  console.error("❌ UNCAUGHT EXCEPTION:", error.message);
+  console.error(error.stack);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ UNHANDLED REJECTION at:", promise, "reason:", reason);
+});
+
 if (process.env.VERCEL) {
   module.exports = app;
 } else if (require.main === module) {
   const server = http.createServer(app);
-  initSocket(server);
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+  
+  try {
+    console.log("Initializing Socket.IO...");
+    initSocket(server);
+    console.log("Socket.IO initialized successfully");
+  } catch (error) {
+    console.error("Socket.IO initialization error:", error.message);
+    console.error(error.stack);
+  }
+  
+  server.on("error", (error) => {
+    console.error("Server error:", error.message);
+    console.error(error.stack);
   });
+  
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`✅ Server running on port ${PORT}`);
+  });
+  
   module.exports = server;
 } else {
   module.exports = app;

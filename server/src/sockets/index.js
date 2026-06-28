@@ -41,37 +41,43 @@ function emitToUser(io, userId, event, payload) {
 }
 
 function initSocket(server) {
-  const io = new Server(server, {
-    cors: {
-      origin(origin, callback) {
-        if (isAllowedClientOrigin(origin)) return callback(null, true);
-        return callback(new Error("Not allowed by Socket.IO CORS"), false);
+  try {
+    const io = new Server(server, {
+      cors: {
+        origin(origin, callback) {
+          if (isAllowedClientOrigin(origin)) return callback(null, true);
+          return callback(new Error("Not allowed by Socket.IO CORS"), false);
+        },
+        methods: ["GET", "POST"],
+        credentials: true,
       },
-      methods: ["GET", "POST"],
-      credentials: true,
-    },
-  });
-  ioInstance = io;
+    });
+    ioInstance = io;
 
-  io.use((socket, next) => {
-    try {
-      const token = socket.handshake.auth?.token || null;
-      if (!token) return next(new Error("Unauthorized"));
-      const payload = jwt.verify(token, process.env.JWT_SECRET);
-      socket.userId = payload.id;
-      next();
-    } catch (e) {
-      next(new Error("Unauthorized"));
-    }
-  });
+    io.use((socket, next) => {
+      try {
+        const token = socket.handshake.auth?.token || null;
+        if (!token) return next(new Error("Unauthorized"));
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        socket.userId = payload.id;
+        next();
+      } catch (e) {
+        next(new Error("Unauthorized"));
+      }
+    });
 
-  io.on("connection", async (socket) => {
-    const userId = socket.userId;
-    addUserSocket(userId, socket.id);
-    console.info(`[sockets] connected user=${userId} socket=${socket.id}`);
+    io.on("connection", async (socket) => {
+      const userId = socket.userId;
+      addUserSocket(userId, socket.id);
+      console.info(`[sockets] connected user=${userId} socket=${socket.id}`);
 
-    await User.update({ isOnline: true }, { where: { id: userId } });
-    socket.broadcast.emit("user:presence", { userId, isOnline: true, lastSeen: null });
+      try {
+        await User.update({ isOnline: true }, { where: { id: userId } });
+      } catch (err) {
+        console.warn(`[sockets] failed to update user status:`, err.message);
+      }
+      
+      socket.broadcast.emit("user:presence", { userId, isOnline: true, lastSeen: null });
 
     // Join the socket to rooms for each chat the user is a member of.
     // This makes emitting to a chat reliable even if users have multiple sockets.
@@ -235,19 +241,34 @@ function initSocket(server) {
     });
 
     socket.on("disconnect", async () => {
-      const uid = removeUserSocket(socket.id);
-      if (uid && !userIdToSockets.get(uid)?.size) {
-        await User.update({ isOnline: false, lastSeen: new Date() }, { where: { id: uid } });
-        socket.broadcast.emit("user:presence", {
-          userId: uid,
-          isOnline: false,
-          lastSeen: new Date().toISOString(),
-        });
+      try {
+        const uid = removeUserSocket(socket.id);
+        if (uid && !userIdToSockets.get(uid)?.size) {
+          await User.update({ isOnline: false, lastSeen: new Date() }, { where: { id: uid } });
+          socket.broadcast.emit("user:presence", {
+            userId: uid,
+            isOnline: false,
+            lastSeen: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.warn(`[sockets] disconnect error for socket=${socket.id}:`, err.message);
       }
     });
   });
 
+  console.log("✅ Socket.IO initialized successfully");
   return io;
+} catch (error) {
+  console.error("❌ Socket.IO initialization failed:", error.message);
+  console.error(error.stack);
+  // Still return a dummy io to prevent server crash
+  return {
+    emit: () => {},
+    on: () => {},
+    to: () => ({ emit: () => {} }),
+    broadcast: { emit: () => {} },
+  };
 }
 
 function getIO() {
