@@ -32,17 +32,26 @@ function getClientUrls() {
 }
 
 function isAllowedClientOrigin(origin) {
+  console.log("Incoming Origin:", origin);
+  console.log("Allowed Origins:", getClientUrls());
+
   if (!origin) return true;
+
   const urls = getClientUrls();
+
   if (urls.includes(origin)) return true;
 
   try {
     const hostname = new URL(origin).hostname;
+
     if (hostname.endsWith(".vercel.app")) return true;
+
     if (hostname === "localhost" || hostname === "127.0.0.1") return true;
-  } catch {
+  } catch (err) {
+    console.log(err);
     return false;
   }
+
   return false;
 }
 

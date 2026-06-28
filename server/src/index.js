@@ -46,15 +46,43 @@ if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
 function createApp() {
   const app = express();
   app.set("trust proxy", 1);
-  app.use(
-    cors({
-      origin(origin, callback) {
-        if (isAllowedClientOrigin(origin)) return callback(null, true);
-        callback(new Error("Not allowed by CORS"), false);
-      },
-      credentials: true,
-    }),
-  );
+  // app.use(
+  //   cors({
+  //     origin(origin, callback) {
+  //       if (isAllowedClientOrigin(origin)) return callback(null, true);
+  //       callback(new Error("Not allowed by CORS"), false);
+  //     },
+  //     credentials: true,
+  //   }),
+  // );
+
+  const corsOptions = {
+    origin: function (origin, callback) {
+      console.log("Origin:", origin);
+
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (isAllowedClientOrigin(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("Blocked:", origin);
+
+      return callback(new Error(`CORS Blocked: ${origin}`));
+    },
+
+    credentials: true,
+
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+
+    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
+  };
+
+  app.use(cors(corsOptions));
+
+  app.options("*", cors(corsOptions));
 
   app.use(
     helmet({
@@ -67,7 +95,13 @@ function createApp() {
             "https://accounts.google.com",
           ],
           frameSrc: ["'self'", "https://accounts.google.com"],
-          connectSrc: ["'self'", "https://accounts.google.com"],
+          // connectSrc: ["'self'", "https://accounts.google.com"],
+          connectSrc: [
+            "'self'",
+            process.env.CLIENT_URL,
+            "https://accounts.google.com",
+            "https://whatsapp-chat-clone-production.up.railway.app",
+          ],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
           styleSrc: [
             "'self'",
