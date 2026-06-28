@@ -32,7 +32,11 @@ console.log("PORT:", PORT);
 console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("DATABASE_URL set:", !!process.env.DATABASE_URL);
 console.log("JWT_SECRET set:", !!process.env.JWT_SECRET);
-console.log("CLIENT_URL:", process.env.CLIENT_URL || "(not set — CORS allows localhost and *.vercel.app)");
+console.log(
+  "CLIENT_URL:",
+  process.env.CLIENT_URL ||
+    "(not set — CORS allows localhost and *.vercel.app)",
+);
 
 if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET is required in production");
@@ -49,22 +53,30 @@ function createApp() {
         callback(new Error("Not allowed by CORS"), false);
       },
       credentials: true,
-    })
+    }),
   );
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            "https://accounts.google.com",
+          ],
           frameSrc: ["'self'", "https://accounts.google.com"],
           connectSrc: ["'self'", "https://accounts.google.com"],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
-          styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            "https://accounts.google.com",
+          ],
         },
       },
       crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
-    })
+    }),
   );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -99,7 +111,9 @@ function createApp() {
   }
 
   app.use((req, res) => {
-    res.status(404).json({ message: `Route not found: ${req.method} ${req.path}` });
+    res
+      .status(404)
+      .json({ message: `Route not found: ${req.method} ${req.path}` });
   });
 
   app.use(errorHandler);
@@ -113,8 +127,8 @@ if (process.env.VERCEL) {
 } else if (require.main === module) {
   const server = http.createServer(app);
   initSocket(server);
-  server.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
   });
   module.exports = server;
 } else {
