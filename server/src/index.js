@@ -18,10 +18,18 @@ const { configurePassport } = require("./config/passport.js");
 const { isAllowedClientOrigin } = require("./utils/authUtils.js");
 const path = require("path");
 
-connectDB().catch((error) => {
-  console.error("Database startup failed:", error.message);
-  process.exit(1);
-});
+let dbConnected = false;
+
+// Start database connection asynchronously without blocking server startup
+connectDB()
+  .then(() => {
+    dbConnected = true;
+    console.log("Database connected successfully");
+  })
+  .catch((error) => {
+    console.error("Database connection failed:", error.message);
+    console.error("Server will continue running, but database operations will fail");
+  });
 
 configurePassport();
 
@@ -120,8 +128,16 @@ function createApp() {
   app.use(rateLimit({ windowMs: 60_000, max: 120 }));
   app.use(passport.initialize());
 
+  // Health check endpoints (no database required)
   app.get("/health", (req, res) => {
-    res.json({ status: "ok" });
+    res.json({ 
+      status: "ok",
+      database: dbConnected ? "connected" : "connecting" 
+    });
+  });
+
+  app.get("/health/live", (req, res) => {
+    res.json({ status: "alive" });
   });
 
   app.get("/", (req, res) => {
@@ -130,6 +146,17 @@ function createApp() {
       service: "WhatsApp Chat Clone API",
       health: "/health",
     });
+  });
+
+  // Middleware to check database connection for API routes
+  app.use("/api/", (req, res, next) => {
+    if (!dbConnected) {
+      return res.status(503).json({ 
+        error: "Service temporarily unavailable",
+        message: "Database is still connecting. Please try again shortly." 
+      });
+    }
+    next();
   });
 
   app.use("/api/auth", require("./routes/authRoutes.js"));
