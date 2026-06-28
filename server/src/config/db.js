@@ -12,9 +12,21 @@ const sequelize = new Sequelize(databaseUrl, {
 });
 
 const connectDB = async () => {
-  await sequelize.authenticate();
-  await sequelize.sync({ alter: true });
-  console.log("PostgreSQL Connected");
+  try {
+    await sequelize.authenticate();
+    console.log("PostgreSQL Connected");
+    
+    // Use sync in development, skip in production for safety
+    if (process.env.NODE_ENV === "production") {
+      console.log("Production mode: Skipping sequelize.sync() for stability");
+    } else {
+      await sequelize.sync({ alter: true });
+      console.log("Database tables synced");
+    }
+  } catch (error) {
+    console.error("Database error:", error.message);
+    throw error;
+  }
 };
 
 module.exports = { sequelize, connectDB };
