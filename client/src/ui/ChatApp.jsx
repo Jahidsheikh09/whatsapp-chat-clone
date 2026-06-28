@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import { apiGet, apiPost, apiPut } from "../lib/api";
+import { apiGet, apiPost, apiPut, getServerUrl } from "../lib/api";
 
 export default function ChatApp({ socket }) {
   const { user, token, logout, updateProfile } = useAuth();
@@ -754,9 +754,7 @@ export default function ChatApp({ socket }) {
                         ).catch(async () => {
                           // fallback to DELETE endpoint
                           await fetch(
-                            `${
-                              import.meta.env.VITE_API_URL || "http://localhost:5000"
-                            }/api/chats/${active.id || active._id}/members/${
+                            `${getServerUrl()}/api/chats/${active.id || active._id}/members/${
                               m.id || m._id
                             }`,
                             {

@@ -1,6 +1,7 @@
 const Server = require("socket.io").Server;
 const jwt = require("jsonwebtoken");
 const { Op } = require("sequelize");
+const { isAllowedClientOrigin } = require("../utils/authUtils");
 require("../models");
 const User = require("../models/userModel");
 const Chat = require("../models/chatModel");
@@ -39,17 +40,12 @@ function emitToUser(io, userId, event, payload) {
   }
 }
 
-function initSocket(server, corsOrigin) {
+function initSocket(server) {
   const io = new Server(server, {
     cors: {
       origin(origin, callback) {
-        try {
-          if (!origin) return callback(null, true); // allow file:// and same-origin
-          if (Array.isArray(corsOrigin) && corsOrigin.includes(origin)) return callback(null, true);
-          return callback(new Error("Not allowed by Socket.IO CORS"), false);
-        } catch (e) {
-          return callback(null, true);
-        }
+        if (isAllowedClientOrigin(origin)) return callback(null, true);
+        return callback(new Error("Not allowed by Socket.IO CORS"), false);
       },
       methods: ["GET", "POST"],
       credentials: true,

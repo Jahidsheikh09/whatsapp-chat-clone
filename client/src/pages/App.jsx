@@ -4,9 +4,9 @@ import { AuthProvider, useAuth } from '../context/AuthContext.jsx'
 import AuthPage from '../ui/AuthPage.jsx'
 import ChatApp from '../ui/ChatApp.jsx'
 
-const WS_URL =
-  import.meta.env.VITE_SERVER_URL ||
-  (import.meta.env.PROD ? window.location.origin : 'http://localhost:5000')
+import { getServerUrl } from '../lib/api'
+
+const WS_URL = getServerUrl() || 'http://localhost:5000'
 
 const GOOGLE_ERRORS = {
   google_auth_failed: 'Google sign-in failed. Please try again.',
@@ -46,6 +46,20 @@ function Inner() {
         <div className="card">
           <h1>Loading...</h1>
           <p>Please wait while we load your data.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (import.meta.env.PROD && !getServerUrl()) {
+    return (
+      <div className="centered">
+        <div className="card auth-card">
+          <h1>Configuration error</h1>
+          <p className="auth-error">
+            Backend URL is missing. In Vercel, set <code>VITE_API_URL</code> and{' '}
+            <code>VITE_SERVER_URL</code> to your Render URL, then redeploy.
+          </p>
         </div>
       </div>
     )

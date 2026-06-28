@@ -15,7 +15,7 @@ const { initSocket } = require("./sockets/index.js");
 const { errorHandler } = require("./middleware/errorMiddleware.js");
 const { authenticate } = require("./middleware/authMiddleware.js");
 const { configurePassport } = require("./config/passport.js");
-const { getClientUrls, isAllowedClientOrigin } = require("./utils/authUtils.js");
+const { isAllowedClientOrigin } = require("./utils/authUtils.js");
 const path = require("path");
 
 connectDB().catch((error) => {
@@ -32,15 +32,16 @@ console.log("PORT:", PORT);
 console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("DATABASE_URL set:", !!process.env.DATABASE_URL);
 console.log("JWT_SECRET set:", !!process.env.JWT_SECRET);
+console.log("CLIENT_URL:", process.env.CLIENT_URL || "(not set — CORS allows localhost and *.vercel.app)");
 
-function getClientUrlsFromEnv() {
-  return getClientUrls();
+if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET is required in production");
+  process.exit(1);
 }
-
-const CLIENT_URLS = getClientUrlsFromEnv();
 
 function createApp() {
   const app = express();
+  app.set("trust proxy", 1);
   app.use(
     cors({
       origin(origin, callback) {
@@ -76,6 +77,14 @@ function createApp() {
     res.json({ status: "ok" });
   });
 
+  app.get("/", (req, res) => {
+    res.json({
+      status: "ok",
+      service: "WhatsApp Chat Clone API",
+      health: "/health",
+    });
+  });
+
   app.use("/api/auth", require("./routes/authRoutes.js"));
   app.use("/api/users", require("./routes/userRoutes.js"));
   app.use("/api/chats", authenticate, require("./routes/chatRoutes.js"));
@@ -89,6 +98,10 @@ function createApp() {
     });
   }
 
+  app.use((req, res) => {
+    res.status(404).json({ message: `Route not found: ${req.method} ${req.path}` });
+  });
+
   app.use(errorHandler);
   return app;
 }
@@ -99,7 +112,7 @@ if (process.env.VERCEL) {
   module.exports = app;
 } else if (require.main === module) {
   const server = http.createServer(app);
-  initSocket(server, CLIENT_URLS);
+  initSocket(server);
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
