@@ -22,6 +22,7 @@ export default function ChatApp({ socket }) {
   const [groupName, setGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [unreadCounts, setUnreadCounts] = useState({}); // chatId -> count
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Mobile sidebar toggle
 
   useEffect(() => {
     if (!query) {
@@ -354,6 +355,7 @@ export default function ChatApp({ socket }) {
       );
       setChats((prev) => (Array.isArray(prev) ? [chat, ...prev] : [chat]));
       setActive(chat);
+      setSidebarOpen(false); // Close sidebar on mobile
       try { socket?.emit("chat:join", chat.id || chat._id); } catch {}
       setQuery("");
       setSearchResults([]);
@@ -376,6 +378,7 @@ export default function ChatApp({ socket }) {
       );
       setChats((prev) => (Array.isArray(prev) ? [chat, ...prev] : [chat]));
       setActive(chat);
+      setSidebarOpen(false); // Close sidebar on mobile
       try { socket?.emit("chat:join", chat.id || chat._id); } catch {}
       setQuery("");
       setSearchResults([]);
@@ -475,11 +478,27 @@ export default function ChatApp({ socket }) {
     );
   }
 
-  const safeChats = Array.isArray(chats) ? chats : [];
-
   return (
     <div className="layout">
-      <aside className="sidebar">
+      {/* Mobile overlay to close sidebar */}
+      <div 
+        className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+      
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        {/* Mobile close button */}
+        <div className="sidebar-header">
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Chats</span>
+          <button 
+            className="close-sidebar"
+            onClick={() => setSidebarOpen(false)}
+            title="Close menu"
+          >
+            ✕
+          </button>
+        </div>
+
         <div className="me">
           <div
             style={{
@@ -631,7 +650,10 @@ export default function ChatApp({ socket }) {
               safeChats.map((c, i) => (
                 <li
                   key={c.id || c._id || c.name || i}
-                  onClick={() => setActive(c)}
+                  onClick={() => {
+                    setActive(c);
+                    setSidebarOpen(false); // Close sidebar on mobile after selection
+                  }}
                   className={active?.id === (c.id || c._id) ? "self" : ""}
                   style={{ cursor: "pointer" }}
                 >
@@ -644,39 +666,51 @@ export default function ChatApp({ socket }) {
         </div>
       </aside>
       <main className="chat">
-        <header className="chat-header" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {active ? (
-            <>
-              {(() => {
-                if (active.isGroup) {
-                  return renderAvatar(active.name, active.avatarUrl);
-                }
-                const other = getOtherMember(active) || {};
-                return renderAvatar(other.name || other.username, other.avatarUrl);
-              })()}
-              <div style={{ display: "grid", lineHeight: 1.25 }}>
-                <div style={{ fontWeight: 600 }}>{getChatTitle(active)}</div>
-                {!active.isGroup && (
-                  <div style={{ color: "var(--subtext)", fontSize: 12 }}>
-                    {formatPresenceLine(active)}
-                  </div>
-                )}
-              </div>
-              {active?.isGroup && (
-                <button
-                  onClick={() => setShowGroupInfo((v) => !v)}
-                  style={{
-                    marginLeft: "auto",
-                    background: "transparent",
-                    color: "var(--subtext)",
-                  }}
-                >
-                  {showGroupInfo ? "Hide Info" : "Group Info"}
-                </button>
-              )}
-            </>
-          ) : (
-            <>{safeChats.length ? "Select a chat" : "Start a conversation"}</>
+        <header className="chat-header">
+          <button 
+            className="menu-toggle"
+            onClick={() => setSidebarOpen(true)}
+            title="Open menu"
+          >
+            ☰
+          </button>
+          
+          <div className="chat-header-title" style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+            {active ? (
+              <>
+                {(() => {
+                  if (active.isGroup) {
+                    return renderAvatar(active.name, active.avatarUrl);
+                  }
+                  const other = getOtherMember(active) || {};
+                  return renderAvatar(other.name || other.username, other.avatarUrl);
+                })()}
+                <div style={{ display: "grid", lineHeight: 1.25, minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getChatTitle(active)}</div>
+                  {!active.isGroup && (
+                    <div style={{ color: "var(--subtext)", fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {formatPresenceLine(active)}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <span>{safeChats.length ? "Select a chat" : "Start a conversation"}</span>
+            )}
+          </div>
+          
+          {active?.isGroup && (
+            <button
+              onClick={() => setShowGroupInfo((v) => !v)}
+              style={{
+                background: "transparent",
+                color: "var(--subtext)",
+                fontSize: 13,
+                padding: '6px 10px',
+              }}
+            >
+              {showGroupInfo ? "Hide" : "Info"}
+            </button>
           )}
         </header>
         <div className="messages">
