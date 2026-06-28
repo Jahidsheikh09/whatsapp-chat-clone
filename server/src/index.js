@@ -55,6 +55,7 @@ function createApp() {
       credentials: true,
     }),
   );
+
   app.use(
     helmet({
       contentSecurityPolicy: {
