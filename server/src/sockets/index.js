@@ -255,7 +255,7 @@ function initSocket(server) {
         console.warn(`[sockets] disconnect error for socket=${socket.id}:`, err.message);
       }
     });
-    });
+    }); // End of io.on("connection", async (socket) => { ... })
 
     console.log("✅ Socket.IO initialized successfully");
     return io;

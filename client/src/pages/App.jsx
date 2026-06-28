@@ -14,18 +14,25 @@ const GOOGLE_ERRORS = {
 }
 
 function Inner() {
-  const { isAuthed, token, loading, sessionError } = useAuth()
+  const { isAuthed, token, user, loading, sessionError } = useAuth()
   const [oauthError, setOauthError] = useState('')
 
   useEffect(() => {
-    console.log('App: Auth state changed - isAuthed:', isAuthed, 'token:', token?.substring(0, 20) + '...', 'loading:', loading)
-  }, [isAuthed, token, loading])
+    console.log('App: Auth state update -', {
+      isAuthed,
+      hasToken: !!token,
+      hasUser: !!user,
+      loading,
+      sessionError
+    })
+  }, [isAuthed, token, user, loading, sessionError])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const error = params.get('error')
 
     if (error && GOOGLE_ERRORS[error]) {
+      console.log('App: OAuth error detected:', error)
       setOauthError(GOOGLE_ERRORS[error])
       window.history.replaceState({}, '', window.location.pathname || '/')
     }
@@ -39,8 +46,10 @@ function Inner() {
       return null
     }
     try {
-      console.log('App: Creating Socket.IO connection with token')
-      return io(WS_URL, { withCredentials: true, auth: { token } })
+      console.log('App: Creating Socket.IO connection')
+      const newSocket = io(WS_URL, { withCredentials: true, auth: { token } })
+      console.log('App: Socket.IO instance created')
+      return newSocket
     } catch (error) {
       console.error('App: Failed to create Socket.IO connection:', error)
       return null
@@ -49,19 +58,24 @@ function Inner() {
 
   useEffect(() => {
     if (socket) {
-      return () => socket.disconnect()
+      console.log('App: Setting up socket disconnect cleanup')
+      return () => {
+        console.log('App: Disconnecting socket')
+        socket.disconnect()
+      }
     }
   }, [socket])
 
-  if (loading) {
-    console.log('App: Rendering loading state')
+  // Show loading only during the token validation phase
+  if (loading && token) {
+    console.log('App: Rendering loading state (validating token)')
     return (
       <div className="centered">
         <div className="card">
           <h1>⏳ Loading...</h1>
-          <p>Please wait while we load your data.</p>
+          <p>Verifying your session...</p>
           <p style={{ fontSize: '12px', color: 'var(--subtext)', marginTop: '10px' }}>
-            {token ? 'Fetching your profile...' : 'Initializing...'}
+            Please wait while we load your profile.
           </p>
         </div>
       </div>
@@ -73,7 +87,7 @@ function Inner() {
     return (
       <div className="centered">
         <div className="card auth-card">
-          <h1>Configuration error</h1>
+          <h1>⚙️ Configuration Error</h1>
           <p className="auth-error">
             Backend URL is missing. In Vercel, set <code>VITE_API_URL</code> and{' '}
             <code>VITE_SERVER_URL</code> to your Render URL, then redeploy.
@@ -83,11 +97,13 @@ function Inner() {
     )
   }
 
+  // If not authenticated (either never had token or token was cleared), show login
   if (!isAuthed) {
     console.log('App: Rendering AuthPage (not authenticated)')
     return <AuthPage initialError={authError} />
   }
 
+  // If authenticated, show chat
   console.log('App: Rendering ChatApp (authenticated)')
   return <ChatApp socket={socket} />
 }
