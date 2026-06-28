@@ -14,25 +14,20 @@ const GOOGLE_ERRORS = {
 }
 
 function Inner() {
-  const { isAuthed, token, loading, setTokenFromOAuth } = useAuth()
+  const { isAuthed, token, loading, sessionError } = useAuth()
   const [oauthError, setOauthError] = useState('')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const oauthToken = params.get('token')
     const error = params.get('error')
-
-    if (oauthToken) {
-      setTokenFromOAuth(oauthToken)
-      window.history.replaceState({}, '', '/')
-      return
-    }
 
     if (error && GOOGLE_ERRORS[error]) {
       setOauthError(GOOGLE_ERRORS[error])
-      window.history.replaceState({}, '', '/')
+      window.history.replaceState({}, '', window.location.pathname || '/')
     }
-  }, [setTokenFromOAuth])
+  }, [])
+
+  const authError = oauthError || sessionError
 
   const socket = useMemo(() => {
     if (!token) return null
@@ -56,7 +51,7 @@ function Inner() {
     )
   }
 
-  if (!isAuthed) return <AuthPage initialError={oauthError} />
+  if (!isAuthed) return <AuthPage initialError={authError} />
   return <ChatApp socket={socket} />
 }
 

@@ -7,6 +7,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('token') || '')
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [sessionError, setSessionError] = useState('')
   const isAuthed = !!token && !!user
 
   useEffect(() => {
@@ -20,35 +21,52 @@ export function AuthProvider({ children }) {
       setLoading(false)
       return
     }
+
+    let cancelled = false
     setLoading(true)
-    apiGet('/api/users/me', token).then((userData) => {
-      setUser(userData)
-      setLoading(false)
-    }).catch((error) => {
-      console.error('Auth error:', error)
-      setToken('')
-      setUser(null)
-      setLoading(false)
-    })
+    setSessionError('')
+
+    apiGet('/api/users/me', token)
+      .then((userData) => {
+        if (cancelled) return
+        setUser(userData)
+        setLoading(false)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.error('Auth error:', error)
+        setSessionError(error.message || 'Sign-in failed. Please try again.')
+        setToken('')
+        setUser(null)
+        setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [token])
 
   const setTokenFromOAuth = useCallback((oauthToken) => {
+    setSessionError('')
     setToken(oauthToken)
   }, [])
 
   async function register(data) {
+    setSessionError('')
     const res = await apiPost('/api/users/register', data)
     setToken(res.token)
     setUser(res.user)
   }
 
   async function login(data) {
+    setSessionError('')
     const res = await apiPost('/api/users/login', data)
     setToken(res.token)
     setUser(res.user)
   }
 
   function logout() {
+    setSessionError('')
     setToken('')
     setUser(null)
   }
@@ -60,8 +78,8 @@ export function AuthProvider({ children }) {
   }
 
   const value = useMemo(
-    () => ({ token, user, isAuthed, loading, register, login, logout, updateProfile, setTokenFromOAuth }),
-    [token, user, isAuthed, loading, setTokenFromOAuth]
+    () => ({ token, user, isAuthed, loading, sessionError, register, login, logout, updateProfile, setTokenFromOAuth }),
+    [token, user, isAuthed, loading, sessionError, setTokenFromOAuth]
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

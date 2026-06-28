@@ -5,6 +5,7 @@ const color = require("colors");
 const http = require("http");
 const fs = require("fs");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
@@ -14,6 +15,7 @@ const { initSocket } = require("./sockets/index.js");
 const { errorHandler } = require("./middleware/errorMiddleware.js");
 const { authenticate } = require("./middleware/authMiddleware.js");
 const { configurePassport } = require("./config/passport.js");
+const { getClientUrls, isAllowedClientOrigin } = require("./utils/authUtils.js");
 const path = require("path");
 
 connectDB().catch((error) => {
@@ -31,27 +33,19 @@ console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("DATABASE_URL set:", !!process.env.DATABASE_URL);
 console.log("JWT_SECRET set:", !!process.env.JWT_SECRET);
 
-function getClientUrls() {
-  const fromEnv = (process.env.CLIENT_URL || "http://localhost:5173,http://localhost:5174")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (process.env.VERCEL_URL) {
-    fromEnv.push(`https://${process.env.VERCEL_URL}`);
-  }
-  return [...new Set(fromEnv)];
+function getClientUrlsFromEnv() {
+  return getClientUrls();
 }
 
-const CLIENT_URLS = getClientUrls();
+const CLIENT_URLS = getClientUrlsFromEnv();
 
 function createApp() {
   const app = express();
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin) return callback(null, true);
-        const ok = CLIENT_URLS.includes(origin);
-        callback(ok ? null : new Error("Not allowed by CORS"), ok);
+        if (isAllowedClientOrigin(origin)) return callback(null, true);
+        callback(new Error("Not allowed by CORS"), false);
       },
       credentials: true,
     })
@@ -73,6 +67,7 @@ function createApp() {
   );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
   app.use(morgan("dev"));
   app.use(rateLimit({ windowMs: 60_000, max: 120 }));
   app.use(passport.initialize());

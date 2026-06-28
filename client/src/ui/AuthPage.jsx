@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { getGoogleAuthUrl } from '../lib/api'
 
@@ -8,6 +8,10 @@ export default function AuthPage({ initialError = '' }) {
   const [form, setForm] = useState({ email: '', password: '', username: '', name: '' })
   const [error, setError] = useState(initialError)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (initialError) setError(initialError)
+  }, [initialError])
 
   function signInWithGoogle() {
     setError('')
