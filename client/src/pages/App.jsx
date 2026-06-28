@@ -18,6 +18,10 @@ function Inner() {
   const [oauthError, setOauthError] = useState('')
 
   useEffect(() => {
+    console.log('App: Auth state changed - isAuthed:', isAuthed, 'token:', token?.substring(0, 20) + '...', 'loading:', loading)
+  }, [isAuthed, token, loading])
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const error = params.get('error')
 
@@ -31,6 +35,7 @@ function Inner() {
 
   const socket = useMemo(() => {
     if (!token) return null
+    console.log('App: Creating Socket.IO connection with token')
     return io(WS_URL, { withCredentials: true, auth: { token } })
   }, [token])
 
@@ -41,6 +46,7 @@ function Inner() {
   }, [socket])
 
   if (loading) {
+    console.log('App: Rendering loading state')
     return (
       <div className="centered">
         <div className="card">
@@ -52,6 +58,7 @@ function Inner() {
   }
 
   if (import.meta.env.PROD && !getServerUrl()) {
+    console.log('App: Rendering configuration error state')
     return (
       <div className="centered">
         <div className="card auth-card">
@@ -65,7 +72,12 @@ function Inner() {
     )
   }
 
-  if (!isAuthed) return <AuthPage initialError={authError} />
+  if (!isAuthed) {
+    console.log('App: Rendering AuthPage (not authenticated)')
+    return <AuthPage initialError={authError} />
+  }
+
+  console.log('App: Rendering ChatApp (authenticated)')
   return <ChatApp socket={socket} />
 }
 

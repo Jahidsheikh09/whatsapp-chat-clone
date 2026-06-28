@@ -25,16 +25,19 @@ export function AuthProvider({ children }) {
     let cancelled = false
     setLoading(true)
     setSessionError('')
+    console.log('AuthContext: Fetching user data with token:', token.substring(0, 20) + '...')
 
     apiGet('/api/users/me', token)
       .then((userData) => {
         if (cancelled) return
+        console.log('AuthContext: User data fetched successfully:', userData)
         setUser(userData)
         setLoading(false)
       })
       .catch((error) => {
         if (cancelled) return
-        console.error('Auth error:', error)
+        console.error('AuthContext: Failed to fetch user data:', error)
+        console.error('AuthContext: Full error message:', error.message)
         setSessionError(error.message || 'Sign-in failed. Please try again.')
         setToken('')
         setUser(null)
