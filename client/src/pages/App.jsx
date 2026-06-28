@@ -34,9 +34,17 @@ function Inner() {
   const authError = oauthError || sessionError
 
   const socket = useMemo(() => {
-    if (!token) return null
-    console.log('App: Creating Socket.IO connection with token')
-    return io(WS_URL, { withCredentials: true, auth: { token } })
+    if (!token) {
+      console.log('App: No token, socket creation skipped')
+      return null
+    }
+    try {
+      console.log('App: Creating Socket.IO connection with token')
+      return io(WS_URL, { withCredentials: true, auth: { token } })
+    } catch (error) {
+      console.error('App: Failed to create Socket.IO connection:', error)
+      return null
+    }
   }, [token])
 
   useEffect(() => {
@@ -50,8 +58,11 @@ function Inner() {
     return (
       <div className="centered">
         <div className="card">
-          <h1>Loading...</h1>
+          <h1>⏳ Loading...</h1>
           <p>Please wait while we load your data.</p>
+          <p style={{ fontSize: '12px', color: 'var(--subtext)', marginTop: '10px' }}>
+            {token ? 'Fetching your profile...' : 'Initializing...'}
+          </p>
         </div>
       </div>
     )
