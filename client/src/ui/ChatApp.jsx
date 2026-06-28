@@ -478,6 +478,8 @@ export default function ChatApp({ socket }) {
     );
   }
 
+  const safeChats = Array.isArray(chats) ? chats : [];
+
   return (
     <div className="layout">
       {/* Mobile overlay to close sidebar */}
