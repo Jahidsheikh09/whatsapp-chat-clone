@@ -126,9 +126,30 @@ export default function ChatApp({ socket }) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("connect", () => console.info("[socket] connected", socket.id));
-    socket.on("disconnect", (reason) => console.info("[socket] disconnected", reason));
-    socket.on("connect_error", (err) => console.error("[socket] connect_error", err));
+    socket.on("connect", () => {
+      console.info("[socket] ✅ connected", socket.id);
+      // Re-join all chat rooms on reconnection
+      if (Array.isArray(chats)) {
+        chats.forEach((c) => {
+          try {
+            socket.emit("chat:join", c.id || c._id);
+          } catch (err) {
+            console.warn("[socket] failed to rejoin room:", err);
+          }
+        });
+      }
+    });
+    socket.on("disconnect", (reason) => {
+      console.warn("[socket] ❌ disconnected, reason:", reason);
+      // Show a subtle notification to user (optional)
+      if (reason === "io server disconnect") {
+        console.warn("[socket] Server disconnected client, attempting reconnection...");
+        socket.connect();
+      }
+    });
+    socket.on("connect_error", (err) => {
+      console.error("[socket] ⚠️ connect_error:", err.message);
+    });
 
     function handleNewMessage(message) {
       const chatId = message.chat || message.chatId;
@@ -149,7 +170,9 @@ export default function ChatApp({ socket }) {
             try {
               socket.emit("message:delivered", { messageId: message.id || message._id });
               socket.emit("message:seen", { messageIds: [message.id || message._id] });
-            } catch {}
+            } catch (err) {
+              console.warn("[socket] failed to send delivery/seen status:", err);
+            }
           }
       }
 
@@ -203,6 +226,7 @@ export default function ChatApp({ socket }) {
     socket.on("message:new", handleNewMessage);
     socket.on("chat:created", (chat) => {
       if (!chat) return;
+      console.info("[socket] new chat created:", chat.id);
       setChats((prev) => {
         const list = Array.isArray(prev) ? prev : [];
         const exists = list.some((c) => String(c.id || c._id) === String(chat.id || chat._id));
