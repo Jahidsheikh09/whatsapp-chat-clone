@@ -18,22 +18,16 @@ function Inner() {
   const [oauthError, setOauthError] = useState('')
 
   useEffect(() => {
-    const path = window.location.pathname
     const params = new URLSearchParams(window.location.search)
+    const oauthToken = params.get('token')
+    const error = params.get('error')
 
-    if (path === '/auth/callback') {
-      const oauthToken = params.get('token')
-      if (oauthToken) {
-        setTokenFromOAuth(oauthToken)
-        window.history.replaceState({}, '', '/')
-      } else {
-        setOauthError('Google sign-in did not return a token.')
-        window.history.replaceState({}, '', '/')
-      }
+    if (oauthToken) {
+      setTokenFromOAuth(oauthToken)
+      window.history.replaceState({}, '', '/')
       return
     }
 
-    const error = params.get('error')
     if (error && GOOGLE_ERRORS[error]) {
       setOauthError(GOOGLE_ERRORS[error])
       window.history.replaceState({}, '', '/')

@@ -42,7 +42,7 @@ router.get(
   (req, res) => {
     const token = generateToken(req.user.id);
     const clientUrl = getPrimaryClientUrl();
-    res.redirect(`${clientUrl}/auth/callback?token=${encodeURIComponent(token)}`);
+    res.redirect(`${clientUrl}/?token=${encodeURIComponent(token)}`);
   }
 );
 
