@@ -255,20 +255,21 @@ function initSocket(server) {
         console.warn(`[sockets] disconnect error for socket=${socket.id}:`, err.message);
       }
     });
-  });
+    });
 
-  console.log("✅ Socket.IO initialized successfully");
-  return io;
-} catch (error) {
-  console.error("❌ Socket.IO initialization failed:", error.message);
-  console.error(error.stack);
-  // Still return a dummy io to prevent server crash
-  return {
-    emit: () => {},
-    on: () => {},
-    to: () => ({ emit: () => {} }),
-    broadcast: { emit: () => {} },
-  };
+    console.log("✅ Socket.IO initialized successfully");
+    return io;
+  } catch (error) {
+    console.error("❌ Socket.IO initialization failed:", error.message);
+    console.error(error.stack);
+    // Still return a dummy io to prevent server crash
+    return {
+      emit: () => {},
+      on: () => {},
+      to: () => ({ emit: () => {} }),
+      broadcast: { emit: () => {} },
+    };
+  }
 }
 
 function getIO() {
